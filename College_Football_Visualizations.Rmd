@@ -2,4 +2,174 @@
 title: "College_Football_Visualizations"
 output: html_document
 ---
+# Load necessary libraries and packages
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load packages
+if (!require("httr")) install.packages("httr")
+if (!require("jsonlite")) install.packages("jsonlite")
+if (!require("tidyverse")) install.packages("tidyverse")
+
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+library(ggrepel) 
+library(tidyr)
+library(plotly)
+library(httr)
+library(jsonlite)
+
+
+```
+
+
+
+
+
+# Connect to API 
+```{r}
+
+# Get API key from .Renviron
+api_key <- Sys.getenv("CFB_API_KEY")
+
+```
+
+
+
+
+
+# Load data 
+
+## Overall team talent
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/talent",
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+talent_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(talent_data)
+
+
+```
+
+
+## SP +  advanced ratings
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/ratings/sp",
+  query = list(year = 2023),  # Optional: filter by year
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+sp_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(sp_data)
+
+
+```
+
+
+
+## Coaching history
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/coaches",
+  query = list(year = 2023),  # Optional: filter by year,
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+coach_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(coach_data)
+
+
+```
+
+
+
+## Betting lines
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/lines",
+  query = list(year = 2023),  # Optional: filter by year,
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+line_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(line_data)
+
+
+```
+
+
+
+## Team recruiting ranks
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/recruiting/teams",
+  query = list(year = 2023),
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+recruit_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(recruit_data)
+
+
+```
+
+
+## Returning player production
+```{r}
+
+# API call to team talent composite
+res <- GET(
+  url = "https://api.collegefootballdata.com/player/returning",
+  query = list(year = 2023),
+  add_headers(Authorization = paste("Bearer", api_key))
+)
+
+# Parse the JSON response
+exp_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
+
+# Preview
+head(exp_data)
+
+
+```
+
+
+
+
+
+
+
 
