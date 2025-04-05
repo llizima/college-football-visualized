@@ -304,24 +304,29 @@ final_p
 # A chart that shows the distribution of two categorical variables
 ## Distribution of team ranking and conferences in College Football for 2024-25 season
 
+
+
+
 ```{r}
 
+library(dplyr)
+library(stringr)
+library(plotly)
 
-
-# Define top conferences
+# 👉 Step 1: Define top conferences explicitly
 top_confs <- c(
   "SEC", "Big Ten", "ACC", "Pac-12", "Big 12",
-  "American Athletic", "Mountain West", "Conference USA", "FBS Independents"
+  "American Athletic", "Mountain West", "Conference USA", 
+  "FBS Independents", "Mid-American", "Sun Belt"
 )
 
-# Step 1: Clean + standardize + group conferences
-df_rank_vs_conf <- sp_data %>%
+# 👉 Step 2: Clean and categorize data
+df_clean <- sp_data %>%
   filter(!is.na(ranking), !is.na(conference)) %>%
   mutate(
-    # Clean names
     conference = str_squish(str_trim(conference)),
-
-    # Standardize names
+    
+    # 👉 Standardize known names
     conference = case_when(
       str_detect(conference, regex("Mountain", ignore_case = TRUE)) ~ "Mountain West",
       str_detect(conference, regex("SEC", ignore_case = TRUE)) ~ "SEC",
@@ -332,72 +337,143 @@ df_rank_vs_conf <- sp_data %>%
       str_detect(conference, regex("American", ignore_case = TRUE)) ~ "American Athletic",
       str_detect(conference, regex("Conference USA", ignore_case = TRUE)) ~ "Conference USA",
       str_detect(conference, regex("Independent", ignore_case = TRUE)) ~ "FBS Independents",
-      TRUE ~ "Other"
+      str_detect(conference, regex("Mid-American", ignore_case = TRUE)) ~ "Mid-American",
+      str_detect(conference, regex("Sun Belt", ignore_case = TRUE)) ~ "Sun Belt",
+      TRUE ~ "Non-Top Conference"   # ✅ label for all other conferences
     ),
-
-    # Collapse into top conferences or "Other"
-    conference = ifelse(conference %in% top_confs, conference, "Other"),
-
-    # Define ranking group
+    
+    # 👉 Collapse into top or non-top conferences
+    conference = ifelse(conference %in% top_confs, conference, "Non-Top Conference"),
+    
+    # 👉 Define ranking groups
     ranking_group = case_when(
       ranking >= 1 & ranking <= 5 ~ "1-5",
       ranking >= 6 & ranking <= 10 ~ "6-10",
       ranking >= 11 & ranking <= 15 ~ "11-15",
-      ranking > 15 ~ "Others"
+      ranking > 15 ~ "Outside Top 15"
     ),
-    
-    # Factor levels for ordering x-axis
-    ranking_group = factor(ranking_group, levels = c("1-5", "6-10", "11-15", "Others"))
+    ranking_group = factor(ranking_group, levels = c("1-5", "6-10", "11-15", "Outside Top 15"))
   )
 
-# Step 2: Group and summarize
-conf_vs_rank <- df_rank_vs_conf %>%
-  count(ranking_group, conference, name = "count") %>%
+# 👉 Step 3: Summarize for plotting
+df_plot <- df_clean %>%
+  group_by(ranking_group, conference) %>%
+  summarise(
+    count = n(),
+    teams = paste(team, collapse = "<br>"),
+    .groups = "drop"
+  ) %>%
   group_by(ranking_group) %>%
   mutate(
-    Percent = 100 * count / sum(count),
-    conference = fct_reorder2(conference, ranking_group, -Percent)  # stack largest % at bottom
+    percent = 100 * count / sum(count)
   ) %>%
+  arrange(ranking_group, desc(percent)) %>%
   ungroup()
 
-# Step 3: Define consistent color map
+# 👉 Step 4: Distinct color map
 color_map <- c(
   "SEC" = "#E69F00",
   "Big Ten" = "#56B4E9",
-  "ACC" = "#009E73",
-  "Pac-12" = "#0072B2",
+  "ACC" = "darkgreen",
+  "Pac-12" = "purple",
   "Big 12" = "#D55E00",
-  "American Athletic" = "#CC79A7",
+  "American Athletic" = "lightpink",
   "Mountain West" = "#999999",
   "Conference USA" = "#66C2A5",
   "FBS Independents" = "#000000",
-  "Other" = "brown"
+  "Mid-American" = "#A52A2A",
+  "Sun Belt" = "#20B2AA",
+  "Non-Top Conference" = "gray40"  # ✅ for grouped others
 )
 
-# Step 4: Plot
-p <- ggplot(conf_vs_rank, aes(x = ranking_group, y = Percent, fill = conference)) +
-  geom_bar(stat = "identity", color = "black") +
-  scale_fill_manual(
-    name = "Conference",
-    values = color_map
-  ) +
-  labs(
-    x = "Ranking Group",
-    y = "Percent (%)",
-    title = "Top 15 Ranking Distribution by Conference",
-    subtitle = "All other teams grouped as 'Other'"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title   = element_text(hjust = 0.5, face = "bold"),
-    plot.subtitle = element_text(hjust = 0.5),
-    axis.text.x  = element_text(face = "bold", size = 12),
-    axis.title.y = element_text(face = "bold")
-  ) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+# 👉 Step 5: Build plotly stacked bar chart
+p_plotly <- plot_ly()
+ranking_levels <- levels(df_clean$ranking_group)
+used_legends <- c()
 
-p
+for (grp in ranking_levels) {
+  df_grp <- df_plot %>%
+    filter(ranking_group == grp) %>%
+    arrange(percent)  # ensures tallest stack appears on top
+  
+  for (i in 1:nrow(df_grp)) {
+    row <- df_grp[i, ]
+    show_legend <- !(row$conference %in% used_legends)
+    used_legends <- c(used_legends, row$conference)
+    
+    p_plotly <- add_trace(
+      p_plotly,
+      x = row$ranking_group,
+      y = row$percent,
+      name = row$conference,
+      type = 'bar',
+      marker = list(color = color_map[[row$conference]]),
+      text = paste0(
+        "<b>Conference:</b> ", row$conference,
+        "<br><b>Percent:</b> ", round(row$percent, 1), "%",
+        "<br><b>Teams:</b><br>", row$teams
+      ),
+      hoverinfo = "text",
+      textposition = "none",
+      showlegend = show_legend,
+      legendgroup = row$conference
+    )
+  }
+}
+
+# 👉 Step 6: Layout
+p_plotly <- layout(
+  p_plotly,
+  barmode = "stack",
+  title = list(
+    text = "<b>Top 15 Ranking Distribution by Conference</b><br><span style='font-size:12pt;'>2024–2025 Season</span>",
+    x = 0.5
+  ),
+  xaxis = list(title = "Ranking Group", categoryorder = "array", categoryarray = ranking_levels),
+  yaxis = list(title = "Percent (%)"),
+  legend = list(title = list(text = "<b>Conference</b>")),
+  margin = list(t = 80)
+)
+
+p_plotly
+
+
+
+
 ```
+
+
+Power Five (P5) Conferences:
+These are officially recognized by the NCAA, media, and CFP (College Football Playoff) as the most competitive and financially dominant leagues:
+
+SEC
+
+Big Ten
+
+ACC
+
+Big 12
+
+Pac-12 (Note: dissolved for 2024–25, only Oregon State & Washington State remain independent or temporarily aligned)
+
+
+These conferences historically receive automatic access to top bowl games, recruit elite players, and dominate TV revenue.
+
+
+ Group of Five (G5) Conferences – strongest among non-P5:
+American Athletic Conference (AAC) – top G5 league, had multiple ranked teams in recent years (e.g., Tulane, SMU, UCF before they moved)
+
+Mountain West – strong G5 league with consistent competitiveness (e.g., Boise State, Air Force)
+
+Conference USA – less competitive, but still in FBS; included for completeness
+
+FBS Independents – like Notre Dame, Army, and formerly BYU; some (Notre Dame) compete at Power levels
+
+Sun Belt – increasingly strong (e.g., App State, Troy)
+
+Mid-American (MAC) – generally weaker in national rankings
+
+
 
 
 
