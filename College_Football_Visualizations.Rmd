@@ -17,12 +17,17 @@ if (!require("tidyverse")) install.packages("tidyverse")
 # Load libraries
 library(ggplot2)
 library(dplyr)
+library(forcats)
 library(cowplot)
 library(ggrepel) 
 library(tidyr)
 library(plotly)
 library(httr)
 library(jsonlite)
+library(scales)
+library(tidyverse)
+library(stringr)
+library(RColorBrewer)
 
 
 ```
@@ -61,6 +66,7 @@ talent_data <- fromJSON(content(res, as = "text"), flatten = TRUE)
 head(talent_data)
 
 
+
 ```
 
 
@@ -70,7 +76,7 @@ head(talent_data)
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/ratings/sp",
-  query = list(year = 2023),  # Optional: filter by year
+  query = list(year = 2024),  # Optional: filter by year
   add_headers(Authorization = paste("Bearer", api_key))
 )
 
@@ -91,7 +97,7 @@ head(sp_data)
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/coaches",
-  query = list(year = 2023),  # Optional: filter by year,
+  query = list(year = 2024),  # Optional: filter by year,
   add_headers(Authorization = paste("Bearer", api_key))
 )
 
@@ -112,7 +118,7 @@ head(coach_data)
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/lines",
-  query = list(year = 2023),  # Optional: filter by year,
+  query = list(year = 2024),  # Optional: filter by year,
   add_headers(Authorization = paste("Bearer", api_key))
 )
 
@@ -133,7 +139,7 @@ head(line_data)
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/recruiting/teams",
-  query = list(year = 2023),
+  query = list(year = 2024),
   add_headers(Authorization = paste("Bearer", api_key))
 )
 
@@ -153,7 +159,7 @@ head(recruit_data)
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/player/returning",
-  query = list(year = 2023),
+  query = list(year = 2024),
   add_headers(Authorization = paste("Bearer", api_key))
 )
 
@@ -167,9 +173,443 @@ head(exp_data)
 ```
 
 
+# A chart that shows the distribution of a single categorical variable
+
+## Distribution of college football conferences for 2024 season
+
+```{r}
+
+# Inspect data
+glimpse(sp_data)
+glimpse(recruit_data)
+glimpse(coach_data)
+glimpse(talent_data)
+glimpse(exp_data)
+
+# Sort conferences by frequency
+sp_df <- sp_data %>%
+  filter(!is.na(conference)) %>%
+  mutate(conference = as.factor(conference)) %>% 
+  mutate(conference = fct_lump(conference, n=9)) %>%
+  count(conference, sort = TRUE)
+
+
+# Bar chart
+
+# Create a palette
+text_palette <- colorRampPalette(c("darkgray", "darkorange"))
+
+sp_df <- sp_df %>%
+  mutate(
+    rank = row_number(),
+    skip_color = rank > (n() - 2),
+    alt_index = rank %% 2 == 1,
+    text_color = ifelse(
+  skip_color, 
+  "transparent",  # hide labels for last 2
+  ifelse(rank %in% c(1, 2, 3, 5, 7),  # always show for given ranks
+         text_palette(n())[rank],
+         "transparent")  # hide for everything else
+
+    )
+  )
+
+
+p <- ggplot(data = sp_df, aes(x = fct_reorder(conference, n), y = n, fill = n)) + geom_col(show.legend = FALSE) +
+  geom_text(aes(label = n, color = text_color),
+            hjust = 1.1,
+            size = 4,
+            show.legend = FALSE) +
+  scale_color_identity() +
+  coord_flip() + scale_fill_gradient(low = "lightblue", high = "darkblue") + labs(
+    title = "Number of Teams by College Football Conference",
+    subtitle = "2024-25 Season",
+    x = NULL,
+    y = "Number of Teams",
+    fill = "Count"
+  ) + theme_minimal()
+  
+p
+  
+```
+
+
+### Delete after interpreting the plot: The number of teams for the conference ranges from nearly 18 to 
+    The last 2 teams to win the College Football National Championship are from the 10, Ohio state in 2025
+    and Michigan in 2024. 
+
+
+
+# A chart that shows the distribution of a single quantitative variable
+## Distribution of offensive efficiency for College Football Conferences from the 2024-25 season
+
+```{r}
+
+# Filter out NA
+big10_df <- exp_data %>%
+  filter(!is.na(conference) )
+
+# Inspect data Frame
+glimpse(big10_df)
+
+
+# Stacked bar chart of home_ownership  vs application_type
+
+x_limits <- range(big10_df$percentPPA, na.rm = TRUE)
+binwidth_percent <- (max(big10_df$percentPPA, na.rm = TRUE) - min(big10_df$percentPPA, na.rm = TRUE)) / 15
+median_val <- median(big10_df$percentPPA, na.rm = TRUE)
+
+hist_p <- ggplot(big10_df, aes(x =  percentPPA)) +
+  geom_histogram(binwidth = binwidth_percent, center = 0,
+                 color = "darkgray", fill = "lightblue") +
+  stat_function(fun = function(x) {
+    dnorm(x, mean = mean(big10_df$percentPPA, na.rm = TRUE),
+              sd = sd(big10_df$percentPPA, na.rm = TRUE)) * nrow(big10_df) * binwidth_percent},  
+    aes(color = "Normal"), size = 1.2) +
+  geom_density(aes(y = ..density.. * nrow(big10_df) * binwidth_percent, color = "Empirical"), 
+               adjust = 1.5, size = 1.2, fill = NA) +
+  scale_color_manual(name = "Density:", 
+                     values = c("Normal" = "red", "Empirical" = "blue")) +
+  labs( title = "Distribution of Offensive Efficiency for College Football Teams",  subtitle = "2024-25 Season",
+        x = "percentPPA",y = "Count" ) + coord_cartesian(xlim = x_limits) + 
+  theme_minimal()
+
+
+box_p <- ggplot(big10_df, aes(x = percentPPA, y = factor(1))) +
+  geom_boxplot(fill = "lightblue", width = 0.4, outlier.color = "black") +
+   geom_text(aes(x = median_val, y = 1, label = paste0("Median = ", round(median_val, 2))),
+            vjust = -0.000001, size = 4, color = "black") +  
+  coord_cartesian(xlim = x_limits) +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.margin = margin(t = -15)  # reduce white space between plots
+  ) +
+  labs(y = NULL, x = NULL)
+
+final_p <- plot_grid(hist_p, box_p, 
+                     ncol = 1, 
+                     align = "v",       # align vertically
+                     rel_heights = c(3, 0.5))
+
+final_p
+  
+```
+
+# A chart that shows the distribution of two categorical variables
+## Distribution of team ranking and conferences in College Football for 2024-25 season
+
+```{r}
+
+
+
+# Define top conferences
+top_confs <- c(
+  "SEC", "Big Ten", "ACC", "Pac-12", "Big 12",
+  "American Athletic", "Mountain West", "Conference USA", "FBS Independents"
+)
+
+# Step 1: Clean + standardize + group conferences
+df_rank_vs_conf <- sp_data %>%
+  filter(!is.na(ranking), !is.na(conference)) %>%
+  mutate(
+    # Clean names
+    conference = str_squish(str_trim(conference)),
+
+    # Standardize names
+    conference = case_when(
+      str_detect(conference, regex("Mountain", ignore_case = TRUE)) ~ "Mountain West",
+      str_detect(conference, regex("SEC", ignore_case = TRUE)) ~ "SEC",
+      str_detect(conference, regex("Big Ten", ignore_case = TRUE)) ~ "Big Ten",
+      str_detect(conference, regex("ACC", ignore_case = TRUE)) ~ "ACC",
+      str_detect(conference, regex("Pac", ignore_case = TRUE)) ~ "Pac-12",
+      str_detect(conference, regex("Big 12", ignore_case = TRUE)) ~ "Big 12",
+      str_detect(conference, regex("American", ignore_case = TRUE)) ~ "American Athletic",
+      str_detect(conference, regex("Conference USA", ignore_case = TRUE)) ~ "Conference USA",
+      str_detect(conference, regex("Independent", ignore_case = TRUE)) ~ "FBS Independents",
+      TRUE ~ "Other"
+    ),
+
+    # Collapse into top conferences or "Other"
+    conference = ifelse(conference %in% top_confs, conference, "Other"),
+
+    # Define ranking group
+    ranking_group = case_when(
+      ranking >= 1 & ranking <= 5 ~ "1-5",
+      ranking >= 6 & ranking <= 10 ~ "6-10",
+      ranking >= 11 & ranking <= 15 ~ "11-15",
+      ranking > 15 ~ "Others"
+    ),
+    
+    # Factor levels for ordering x-axis
+    ranking_group = factor(ranking_group, levels = c("1-5", "6-10", "11-15", "Others"))
+  )
+
+# Step 2: Group and summarize
+conf_vs_rank <- df_rank_vs_conf %>%
+  count(ranking_group, conference, name = "count") %>%
+  group_by(ranking_group) %>%
+  mutate(
+    Percent = 100 * count / sum(count),
+    conference = fct_reorder2(conference, ranking_group, -Percent)  # stack largest % at bottom
+  ) %>%
+  ungroup()
+
+# Step 3: Define consistent color map
+color_map <- c(
+  "SEC" = "#E69F00",
+  "Big Ten" = "#56B4E9",
+  "ACC" = "#009E73",
+  "Pac-12" = "#0072B2",
+  "Big 12" = "#D55E00",
+  "American Athletic" = "#CC79A7",
+  "Mountain West" = "#999999",
+  "Conference USA" = "#66C2A5",
+  "FBS Independents" = "#000000",
+  "Other" = "brown"
+)
+
+# Step 4: Plot
+p <- ggplot(conf_vs_rank, aes(x = ranking_group, y = Percent, fill = conference)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(
+    name = "Conference",
+    values = color_map
+  ) +
+  labs(
+    x = "Ranking Group",
+    y = "Percent (%)",
+    title = "Top 15 Ranking Distribution by Conference",
+    subtitle = "All other teams grouped as 'Other'"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title   = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5),
+    axis.text.x  = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold")
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+
+p
+```
+
+
+
+
+  
+
+A chart that shows the distribution of a quantitative variable across categories of a
+categorical variable
+
+# I will compare offense.ranking across the categories of conference 
+```{r}
+
+
+sp_data
+glimpse(sp_data)
+
+# Filter and clean offense.ranking and conference
+df_box <- sp_data %>%
+  filter(!is.na(offense.ranking), !is.na(conference)) %>%
+  mutate(conference = str_squish(str_trim(conference)))  # Clean up spaces
+
+df_box <- df_box %>% mutate(conference = fct_lump(factor(conference), n = 5))
+
+
+# Create boxplot
+Pbox <- ggplot(data = df_box, aes(x = conference, y = offense.ranking, fill = conference)) +
+  geom_boxplot() +
+  labs(
+    x = "",
+    y = "Offensive Ranking",
+    title = "Distribution of Offensive Rankings by Conference"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x  = element_text(face = "bold", size = 10, angle = 45, hjust = 1),
+    axis.title.y = element_text(face = "bold", size = 14),
+    plot.title   = element_text(hjust = 0.5, face = "bold")
+  ) +
+  scale_fill_viridis_d(option = "plasma") +
+  scale_y_reverse(expand = expansion(mult = c(0, 0.1))) +  # Optional: lower rankings are better
+  theme(legend.position = "none")
+
+Pbox
+
+
+```
 
 
 
 
 
+A chart that shows the relationship between two quantitative variables
+Scatter plot of defense.rating and ranking  
 
+```{r}
+
+
+# Filter and select relevant variables
+df_def <- sp_data %>%
+  filter(!is.na(defense.rating), !is.na(ranking)) %>%
+  select(team, ranking, defense.rating, offense.ranking, conference)
+
+# Calculate IQR-based outlier bounds
+Q1_def <- quantile(df_def$defense.rating, 0.25)
+Q3_def <- quantile(df_def$defense.rating, 0.75)
+IQR_def <- Q3_def - Q1_def
+lb_def <- Q1_def - 1.5 * IQR_def
+ub_def <- Q3_def + 1.5 * IQR_def
+
+Q1_rank <- quantile(df_def$ranking, 0.25)
+Q3_rank <- quantile(df_def$ranking, 0.75)
+IQR_rank <- Q3_rank - Q1_rank
+lb_rank <- Q1_rank - 1.5 * IQR_rank
+ub_rank <- Q3_rank + 1.5 * IQR_rank
+
+# Label outliers
+df_def <- df_def %>%
+  mutate(outlier_status = ifelse(
+    (defense.rating < lb_def | defense.rating > ub_def) |
+    (ranking < lb_rank | ranking > ub_rank),
+    "Outlier", "Normal"
+  ))
+
+# Create interactive plot
+p_plotly <- plot_ly(
+  data = df_def,
+  x = ~ranking,
+  y = ~defense.rating,
+  type = 'scatter',
+  mode = 'markers',
+  color = ~outlier_status,
+  colors = c("blue", "orange"),
+  text = ~paste(
+    "<b>Team:</b>", team,
+    "<br><b>Conference:</b>", conference,
+    "<br><b>Offense Ranking:</b>", offense.ranking,
+    "<br><b>Defense Rating:</b>", round(defense.rating, 2),
+    "<br><b>Ranking:</b>", ranking
+  ),
+  hoverinfo = 'text',
+  marker = list(size = 10, opacity = 0.8, line = list(width = 1, color = '#333'))
+) %>%
+  layout(
+    title = list(
+      text = "<b>Defense Rating vs Ranking</b><br><span style='font-size:12pt;'>2024–2025 Season</span>",
+      x = 0.5,
+      xanchor = "center"
+    ),
+    margin = list(t = 80),
+    xaxis = list(title = "Ranking"),
+    yaxis = list(title = "Defense Rating"),
+    legend = list(title = list(text = "<b>Outlier Status</b>"))
+  )
+
+p_plotly
+
+
+
+
+
+```
+
+
+
+
+Radar/Spider Chart to display the mean rankings and special teams rating by conference
+
+```{r}
+
+glimpse(sp_data)
+
+
+
+# Prepare data
+radar_df <- sp_data %>%
+  filter(!is.na(conference), 
+         !is.na(offense.ranking), 
+         !is.na(defense.ranking), 
+         !is.na(specialTeams.rating)) %>%
+  group_by(conference) %>%
+  summarise(
+    Offense = mean(offense.ranking, na.rm = TRUE),
+    Defense = mean(defense.ranking, na.rm = TRUE),
+    SpecialTeams = mean(specialTeams.rating, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Normalize values to [0,1] for fair comparison
+  mutate(
+    Offense = scales::rescale(Offense, to = c(0, 1)),
+    Defense = scales::rescale(Defense, to = c(0, 1)),
+    SpecialTeams = scales::rescale(SpecialTeams, to = c(0, 1))
+  ) %>%
+  pivot_longer(cols = -conference, names_to = "Metric", values_to = "Value")
+
+# Unique conferences
+conference_levels <- unique(radar_df$conference)
+
+# Generate a color palette with as many distinct colors as conferences
+num_colors <- length(conference_levels)
+colors <- RColorBrewer::brewer.pal(min(num_colors, 8), "Set2")
+if (num_colors > 8) {
+  # extend colors using distinct hue palette if needed
+  colors <- colorspace::rainbow_hcl(num_colors)
+}
+names(colors) <- conference_levels
+
+# Create plot
+radar_plot <- plot_ly(type = 'scatterpolar', fill = 'toself')
+
+for (conf in conference_levels) {
+  radar_plot <- radar_plot %>%
+    add_trace(
+      r = radar_df$Value[radar_df$conference == conf],
+      theta = radar_df$Metric[radar_df$conference == conf],
+      name = conf,
+      line = list(color = colors[conf]),
+      fillcolor = colors[conf],
+      opacity = 0.5
+    )
+}
+
+radar_plot <- radar_plot %>%
+  layout(
+    title = list(
+      text = "<b>Average Rankings & Special Teams Ratings by Conference</b><br><span style='font-size:12pt;'>2024–2025 Season</span>",
+      x = 0.5,
+      xanchor = "center"
+    ),
+    margin = list(t = 80),
+    polar = list(
+      radialaxis = list(
+        visible = TRUE,
+        range = c(0, 1),
+        tickfont = list(size = 10)
+      )
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = -0.2,
+      font = list(size = 11)
+    )
+  )
+
+radar_plot
+
+
+
+
+
+```
+
+
+Lower ranking values indicate better performance. You can see how balanced conferences are based on the 3 categories.
