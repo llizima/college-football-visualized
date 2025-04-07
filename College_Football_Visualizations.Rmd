@@ -1,17 +1,47 @@
 ---
-title: "College_Football_Visualizations"
-output: html_document
+title: "College Football Visualizations"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: '2'
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    css: styles.css
 ---
-# Load necessary libraries and packages
-
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+# Load necessary libraries and packages
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+# Detect if knitting to PDF
+is_pdf <- knitr::is_latex_output()
+
+# Function to save a plotly plot as an image
+save_plotly_image <- function(plot, filename, width = 800, height = 600) {
+  html_file <- tempfile(fileext = ".html")
+  png_file <- file.path(getwd(), filename)
+  htmlwidgets::saveWidget(plot, html_file, selfcontained = TRUE)
+  webshot2::webshot(html_file, file = png_file, vwidth = width, vheight = height)
+}
 
 # Load packages
 if (!require("httr")) install.packages("httr")
 if (!require("jsonlite")) install.packages("jsonlite")
 if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("webshot2"))install.packages("webshot2")  # Recommended — actively maintained
+if (!require("htmlwidgets")) install.packages("htmlwidgets")
+
 
 
 # Load libraries
@@ -28,16 +58,22 @@ library(scales)
 library(tidyverse)
 library(stringr)
 library(RColorBrewer)
+library(webshot2)
+library(htmlwidgets)
+
+
 
 
 ```
 
 
 
+\newpage
 
 
+
+```{r, include=FALSE}
 # Connect to API 
-```{r}
 
 # Get API key from .Renviron
 api_key <- Sys.getenv("CFB_API_KEY")
@@ -48,10 +84,14 @@ api_key <- Sys.getenv("CFB_API_KEY")
 
 
 
+
+
+
+```{r, include=FALSE}
+
 # Load data 
 
 ## Overall team talent
-```{r}
 
 # API call to team talent composite
 res <- GET(
@@ -70,8 +110,10 @@ head(talent_data)
 ```
 
 
+
+```{r, include=FALSE}
+
 ## SP +  advanced ratings
-```{r}
 
 # API call to team talent composite
 res <- GET(
@@ -91,8 +133,10 @@ head(sp_data)
 
 
 
+
+```{r, include=FALSE}
+
 ## Coaching history
-```{r}
 
 # API call to team talent composite
 res <- GET(
@@ -112,9 +156,9 @@ head(coach_data)
 
 
 
-## Betting lines
-```{r}
 
+```{r, include=FALSE}
+## Betting lines
 # API call to team talent composite
 res <- GET(
   url = "https://api.collegefootballdata.com/lines",
@@ -133,8 +177,10 @@ head(line_data)
 
 
 
+
+```{r, include=FALSE}
+
 ## Team recruiting ranks
-```{r}
 
 # API call to team talent composite
 res <- GET(
@@ -153,8 +199,10 @@ head(recruit_data)
 ```
 
 
+
+```{r, include=FALSE}
+
 ## Returning player production
-```{r}
 
 # API call to team talent composite
 res <- GET(
@@ -173,45 +221,44 @@ head(exp_data)
 ```
 
 
-# A chart that shows the distribution of a single categorical variable
 
-## Distribution of college football conferences for 2024 season
+
+## Team Distribution by Conference (2024 Season)
 
 ```{r}
 
+# A chart that shows the distribution of a single categorical variable
+
 # Inspect data
-glimpse(sp_data)
-glimpse(recruit_data)
-glimpse(coach_data)
-glimpse(talent_data)
-glimpse(exp_data)
+#glimpse(sp_data)
+#glimpse(recruit_data)
+#glimpse(coach_data)
+#glimpse(talent_data)
+#glimpse(exp_data)
 
 # Sort conferences by frequency
 sp_df <- sp_data %>%
   filter(!is.na(conference)) %>%
   mutate(conference = as.factor(conference)) %>% 
-  mutate(conference = fct_lump(conference, n=9)) %>%
+  #mutate(conference = fct_lump(conference, n=9)) %>%
   count(conference, sort = TRUE)
 
 
 # Bar chart
 
 # Create a palette
-text_palette <- colorRampPalette(c("darkgray", "darkorange"))
+text_palette <- colorRampPalette(c("orange", "black"))
 
 sp_df <- sp_df %>%
   mutate(
     rank = row_number(),
     skip_color = rank > (n() - 2),
     alt_index = rank %% 2 == 1,
-    text_color = ifelse(
-  skip_color, 
-  "transparent",  # hide labels for last 2
-  ifelse(rank %in% c(1, 2, 3, 5, 7),  # always show for given ranks
+    text_color = ifelse(rank %in% c(1, 2, 3, 5, 7, (n() - 1), n()),  # include bottom 2
          text_palette(n())[rank],
          "transparent")  # hide for everything else
 
-    )
+    
   )
 
 
@@ -234,29 +281,28 @@ p
 ```
 
 
-### Interpretation of distribution of a single categorical variable:
+### **Interpretation: Team Distribution Across Conferences (2024–25 Season)**
 
-This bar chart displays the distribution of the number of teams across college football conferences for the 2024–25 season. The center of the distribution, or mode, falls within the 12 to 16 team range, which includes the majority of conferences. The maximum is 18 teams, found in the Big Ten, which has expanded significantly. At the other end, the minimum is 2 teams, seen in both the Pac-12 (which effectively dissolved) and the FBS Independents.
+This bar chart summarizes the number of teams in each Football Bowl Subdivision (FBS) conference for the 2024–25 season. The distribution is trimodal, with 12, 14, and 16 teams each appearing more than once. The range of team counts goes from 2 teams (Pac-12) to 18 teams (Big Ten), and the FBS Independents have 3 teams. A typical range for conference sizes is between 10 and 16 teams, where most conferences fall.
 
-The range of team counts spans from 2 to 18, indicating a relatively wide spread in the number of teams per conference. The Big Ten could be considered an informal high-count outlier, while the Pac-12 and Independents may represent low-count outliers, especially since most conferences have at least 10 teams.
+The Big Ten, with 18 teams, and the Pac-12, with just 2 teams, appear outside this typical range. The Big Ten’s growth aligns with its competitive dominance, having produced the last two national champions: Michigan (2023–24) and Ohio State (2024–25). The small size of the Pac-12 reflects its recent decline and effective dissolution.
 
-It’s also notable that the last two national champions—Michigan (2023–24) and Ohio State (2024–25)—both come from the Big Ten. Among the Power Five conferences, the four with the highest team counts are all represented—except the Pac-12, which dissolved before the season. This reflects major realignment trends and a growing concentration of teams in a few dominant conferences.
-
-
+\newpage
 
 
+
+
+```{r, include=FALSE}
 
 # A chart that shows the distribution of a single quantitative variable
 ## Distribution of offensive efficiency for College Football Conferences from the 2024-25 season
-
-```{r}
 
 # Filter out NA
 big10_df <- exp_data %>%
   filter(!is.na(conference) )
 
 # Inspect data Frame
-glimpse(big10_df)
+#glimpse(big10_df)
 
 
 # chart
@@ -303,31 +349,33 @@ final_p <- plot_grid(hist_p, box_p,
                      align = "v",       # align vertically
                      rel_heights = c(3, 0.5))
 
-final_p
-  
-```
+print(final_p)
 
 ### Interpretation of a chart that shows chart that shows the distribution of a single quantitative variable
 
-This plot shows the distribution of offensive efficiency scores for college football teams during the 2024–25 season, measured by Percent PPA (Predicted Points Added). The values range from 0 to 1, where a higher score indicates better offensive performance. Percent PPA reflects how efficiently a team converts scoring opportunities—higher values represent greater success in capitalizing on those chances.
+print("This plot shows the distribution of offensive efficiency scores for college football teams during the 2024–25 season, measured by Percent PPA (Predicted Points Added). The values range from 0 to 1, where a higher score indicates better offensive performance. Percent PPA reflects how efficiently a team converts scoring opportunities—higher values represent greater success in capitalizing on those chances.
 
 The distribution is approximately normal, though the empirical curve appears slightly flatter than a standard bell curve, with thicker tails. This suggests there may be more variability at the extremes than expected in a true normal distribution.
 
 The median Percent PPA score is 0.47, meaning that half of the teams scored below this value and half scored above. The minimum observed score is 2.5% (0.025), and the maximum is 92.5% (0.925), showing a wide range of offensive efficiency across teams. The majority of teams fall between approximately 20% and 62%, with only three teams scoring below 13%, making that range the least frequent.
 
-No formal outliers were identified using the IQR method, but the very low end of the distribution (under 13%) represents a small subset of underperforming offenses.
+No formal outliers were identified using the IQR method, but the very low end of the distribution (under 13%) represents a small subset of underperforming offenses.")
+
+  
+```
 
 
 
 
 
 
+
+
+
+## Distribution of Team Ranking by College Football Conferences from the 2024-25 season
+```{r  }
 
 # A chart that shows the distribution of two categorical variables
-## Distribution of Team Ranking by College Football Conferences from the 2024-25 season
-
-```{r}
-
 
 # Step 1: Define top conferences explicitly
 top_confs <- c(
@@ -459,24 +507,26 @@ p_plotly
 ```
 
 
-### Interpretation of a chart that shows chart that shows the distribution of two categorical variables
-This chart displays the distribution of college football team rankings by conference for the 2024–25 season, grouped into four categories: ranks 1–5, 6–10, 11–15, and Outside Top 15. Among the top five teams, 60% are from the Big Ten and 40% from the SEC, indicating a concentration of top rankings within two conferences. The SEC also dominates the 6–15 range, representing about 60% of those ranked teams, while the ACC and FBS Independents make up the rest.
+### **Interpretation: Team Rankings by Conference (2024–25 Season)**
+This chart shows how team rankings are distributed across FBS conferences, grouped into four categories: 1–5, 6–10, 11–15, and Outside Top 15. Among the top five teams, 60% belong to the Big Ten and 40% to the SEC, showing a strong concentration of elite teams within just two conferences. The SEC continues to dominate the 6–15 range, while the ACC and FBS Independents contribute the remaining ranked teams.
 
-The majority of teams—119 out of 139—fall outside the Top 15, demonstrating a highly uneven distribution of top rankings across conferences. This suggests that only a small subset of Power Five programs consistently reach elite status, while most other teams are not nationally ranked. Notably, no Group of Five teams appear in the Top 15, reinforcing the competitive gap between the Power Five and other FBS conferences. The Pac-12, a former Power Five conference, is absent due to its dissolution, which further reshapes the national competitive landscape.
-
-
+Most teams—119 out of 139—fall outside the Top 15, highlighting the uneven distribution of top rankings across conferences. No Group of Five teams appear in the Top 15, reinforcing the competitive gap between the Power Five and other FBS programs. The Pac-12 is absent altogether, a reflection of its recent decline and dissolution.
 
 
+\newpage
 
 
 
-# A chart that shows the distribution of a quantitative variable across categories of a categorical variable
+
+
+
 ## Distribution of offense.ranking across the categories of conference by College Football Conferences from the 2024-25 season
 ```{r}
 
+# A chart that shows the distribution of a quantitative variable across categories of a categorical variable
 
-sp_data
-glimpse(sp_data)
+#sp_data
+#glimpse(sp_data)
 
 # Filter and clean offense.ranking and conference
 df_box <- sp_data %>%
@@ -509,26 +559,34 @@ Pbox
 
 ```
 
-### Interpretation of a chart that shows the distribution of a quantitative variable across categories of a categorical variable
-This chart shows the distribution of offensive rankings (lower values = better performance) across college football conferences for the 2024–25 season. The y-axis is inverted, so rankings closer to the top of the chart indicate better-performing offenses.
+### **Interpretation: Offensive Rankings by Conference (2024–25 Season)**
+This boxplot compares offensive rankings (where lower is better) across FBS conferences for the 2024–25 season. The y-axis is inverted, so stronger offenses appear higher on the chart.
 
-The SEC has the highest (best) median offensive ranking, followed by the Big 12. However, the Big 12 includes a notable outlier ranked well outside the top 100, pulling the overall spread wider. The median offensive rankings across all conferences range from roughly 25 to 100.
+The SEC shows the best overall offensive performance, with the highest median ranking, followed by the Big 12. However, the Big 12 also includes an outlier ranked well beyond 100, which stretches its distribution. In contrast, the Big Ten and Sun Belt have lower medians, suggesting weaker offenses on average, though some standout teams are present.
 
-The SEC, Big 12, and American Athletic Conference all have median lines higher on the chart, indicating that most of their teams performed better offensively. Their boxplots also show a longer tail toward the bottom, meaning there are a few lower-performing teams dragging down the average. This pattern suggests a right-skewed distribution, where the median is better than the mean.
-
-In contrast, conferences like the Big Ten and Sun Belt have their medians lower on the chart, suggesting that more teams in those conferences had weaker offensive rankings, but with some standout teams performing much better than the rest. This shape indicates left-skewness, where a few very strong teams improve the average, even though most teams underperformed.
-
-The ACC appears more balanced, with the median line roughly centered in the box and no clear skew, suggesting a more symmetrical distribution of offensive rankings among its teams.
+The SEC, Big 12, and American Athletic Conference have boxplots with longer lower tails, indicating a right-skewed distribution—a few teams performed poorly, but most did well. The Big Ten and Sun Belt appear left-skewed, driven by a few top-performing offenses in otherwise weaker groups. The ACC is more symmetrical, with its median near the center of the box, reflecting a more balanced distribution of team performance.
 
 
+
+\newpage
 
 
 
 
 
-# A chart that shows the relationship between two quantitative variables
 ## Scatter plot of defense.rating and ranking across the categories of conference by College Football Conferences from the 2024-25 season
 ```{r}
+
+# A chart that shows the relationship between two quantitative variables
+
+if (is_pdf) {
+  # Save image and include static PNG in PDF
+  save_plotly_image(p_plotly, "ranking_plot.png")
+  knitr::include_graphics("ranking_plot.png")
+} else {
+  # Display interactive Plotly chart in HTML
+  p_plotly
+}
 
 # Filter and select relevant variables
 df_def <- sp_data %>%
@@ -595,26 +653,31 @@ p_plotly
 
 ```
 
-### Interpretation of a chart that shows the relationship between two quantitative variables
+### **Interpretation: Relationship Between Defense Rating and Overall Ranking (2024–25 Season)**
 
-This scatter plot displays the relationship between defense rating and team ranking across college football conferences for the 2024–25 season. The defense rating ranges from approximately 9.2 to 43.8, while ranking spans from 1 (best) to 134 (worst).
+This scatter plot illustrates the relationship between defensive rating and overall team ranking across FBS conferences for the 2024–25 season. Defensive ratings range from 9.2 to 43.8, while rankings span from 1 (highest-ranked) to 134 (lowest-ranked).
 
-There is a clear positive linear association between defense rating and ranking. As a team's defense rating increases (i.e., their defense performs worse), their ranking number also increases (meaning their overall team ranking worsens). This suggests that stronger defenses (lower ratings) are associated with better team performance and lower (more favorable) rankings. The pattern supports the idea that defensive efficiency plays a key role in overall team success.
+There is a positive linear association between the two variables: as defensive rating increases (indicating weaker defensive performance), ranking values also increase (indicating worse overall team performance). This trend suggests that teams with stronger defenses (lower ratings) tend to earn better rankings, highlighting the critical role of defensive efficiency in overall success.
 
-
-
-
+Within the top 20 teams, the distribution is dominated by Power Five conferences, especially the SEC and Big Ten, followed by a smaller presence from the ACC and even fewer from the Big 12. This pattern underscores the competitive strength and sustained dominance of Power Five programs in national rankings.
 
 
 
 
+
+
+
+
+
+
+
+
+```{r, include=FALSE}
 
 # A chart that shows the relationship between two quantitative variables and a categorical variable
 ## Radar/Spider Chart to display the mean rankings and special teams rating by conference
 
-```{r}
-
-glimpse(sp_data)
+#glimpse(sp_data)
 
 
 
@@ -690,17 +753,17 @@ radar_plot <- radar_plot %>%
     )
   )
 
-radar_plot
+print(radar_plot)
 
 
+### Interpretation of a chart that shows the relationship between two quantitative variables and a categorical variable
 
+print("This radar chart displays the mean offensive rating, defensive rating, and special teams rating for each college football conference in the 2024–25 season. In this chart, lower values indicate stronger performance for offense and defense, while higher values represent stronger performance for special teams. Since the radar chart maintains raw scale across all three metrics, the ideal conference would appear closer to the center for offense and defense ratings, but farther out on the special teams axis.
+
+The SEC appears to be one of the most balanced and high-performing conferences, with low (strong) average offensive and defensive ratings, and above-average special teams performance. The Big Ten and ACC also perform relatively well on offense and defense, though they are more moderate in special teams. In contrast, Group of Five conferences such as Conference USA and the Sun Belt tend to have higher (weaker) offensive and defensive ratings, though some may show stronger special teams ratings.")
 
 
 ```
 
 
-### Interpretation of a chart that shows the relationship between two quantitative variables and a categorical variable
 
-This radar chart displays the mean offensive rating, defensive rating, and special teams rating for each college football conference in the 2024–25 season. In this chart, lower values indicate stronger performance for offense and defense, while higher values represent stronger performance for special teams. Since the radar chart maintains raw scale across all three metrics, the ideal conference would appear closer to the center for offense and defense ratings, but farther out on the special teams axis.
-
-The SEC appears to be one of the most balanced and high-performing conferences, with low (strong) average offensive and defensive ratings, and above-average special teams performance. The Big Ten and ACC also perform relatively well on offense and defense, though they are more moderate in special teams. In contrast, Group of Five conferences such as Conference USA and the Sun Belt tend to have higher (weaker) offensive and defensive ratings, though some may show stronger special teams ratings.

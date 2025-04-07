@@ -1,0 +1,25 @@
+body {
+  font-size: 12pt;
+  line-height: 1.4;
+}
+
+h1, h2, h3 {
+  font-size: 16pt;
+  margin-top: 0.8em;
+  margin-bottom: 0.3em;
+}
+
+h1.title {
+  font-size: 20pt;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+p {
+  margin-bottom: 0.5em;
+}
+
+.plotly html-widget {
+  margin-bottom: 15px;
+}
